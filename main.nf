@@ -21,7 +21,7 @@ Channel
 
 Channel.value(params.mate).into{g_38_mate_g_72;g_38_mate_g_106}
 Channel.value(params.cellBarcodePattern).set{g_73_cellBarcodePattern_g_72}
-Channel.value(params.cutoff_for_reads_per_cell).into{g_111_cutoff_g110_90;g_111_cutoff_g110_91;g_111_cutoff_g112_90;g_111_cutoff_g112_91;g_111_cutoff_g113_90;g_111_cutoff_g113_91}
+Channel.value(params.cutoff_for_reads_per_cell).into{g_111_cutoff_g122_90;g_111_cutoff_g122_91;g_111_cutoff_g123_90;g_111_cutoff_g123_91;g_111_cutoff_g124_90;g_111_cutoff_g124_91}
 g_118_gtf_url_g114_15 = file(params.gtf_url, type: 'any') 
 g_119_genome_url_g114_15 = file(params.genome_url, type: 'any') 
 Channel.value(params.commondb_url).set{g_120_commondb_url_g114_15}
@@ -503,16 +503,16 @@ input:
 output:
  set val(oldname), file("${oldname}.bam")  into g116_13_merged_bams
  set val(oldname), file("*_sorted*bai")  into g116_13_bam_index
- set val(oldname), file("*_sorted*bam")  into g116_13_sorted_bam_g112_85
+ set val(oldname), file("*_sorted*bam")  into g116_13_sorted_bam_g123_92
 
 shell:
 '''
 num=$(echo "!{bamfiles.join(" ")}" | awk -F" " '{print NF-1}')
 if [ "${num}" -gt 0 ]; then
-    samtools merge !{oldname}.bam !{bamfiles.join(" ")} && samtools sort -O bam -T !{oldname} -o !{oldname}_sorted.bam !{oldname}.bam && samtools index !{oldname}_sorted.bam
+    samtools merge !{oldname}.bam !{bamfiles.join(" ")} && samtools sort -o !{oldname}_sorted.bam !{oldname}.bam && samtools index !{oldname}_sorted.bam
 else
     mv !{bamfiles.join(" ")} !{oldname}.bam 2>/dev/null || true
-    samtools sort  -T !{oldname} -O bam -o !{oldname}_sorted.bam !{oldname}.bam && samtools index !{oldname}_sorted.bam
+    samtools sort  -o !{oldname}_sorted.bam !{oldname}.bam && samtools index !{oldname}_sorted.bam
 fi
 '''
 }
@@ -531,188 +531,22 @@ if ($HOSTNAME == "ghpcc06.umassrc.org"){
 process Single_Cell_Module_after_HISAT2_samtools_sort_index {
 
 input:
- set val(name), file(bam) from g116_13_sorted_bam_g112_85
+ set val(name), file(bam) from g116_13_sorted_bam_g123_92
 
 output:
- set val(name), file("bam/*.bam")  into g112_85_bam_file_g112_90
- set val(name), file("bam/*.bai")  into g112_85_bam_index_g112_90
+ set val(name), file("bam/*.bam")  into g123_92_bam_file_g123_90
+ set val(name), file("bam/*.bai")  into g123_92_bam_index_g123_90
 
 script:
 nameAll = bam.toString()
 if (nameAll.contains('_sorted.bam')) {
     runSamtools = "samtools index " + bam 
 } else {
-    runSamtools = "samtools sort " + bam + " " + name +"_sorted && samtools index " + name + "_sorted.bam "
+    runSamtools = "samtools sort -o " + name +"_sorted " + bam +" && samtools index " + name + "_sorted.bam "
 }
 """
 $runSamtools
 mkdir -p bam && mv *_sorted.ba* bam/.
-"""
-}
-
-params.countUniqueAlignedBarcodes_fromFile_filePath =  ""  //* @input
-
-//* autofill
-if ($HOSTNAME == "ghpcc06.umassrc.org"){
-    $TIME = 500
-    $CPU  = 1
-    $MEMORY = 1
-    $QUEUE = "long"
-}
-//*
-if (!((params.run_Single_Cell_Module && (params.run_Single_Cell_Module == "yes")) || !params.run_Single_Cell_Module)){
-g112_85_bam_file_g112_90.into{g112_90_sorted_bam_g112_91}
-g112_85_bam_index_g112_90.into{g112_90_bam_index_g112_91}
-g112_90_count_file_g112_91 = Channel.empty()
-} else {
-
-
-process Single_Cell_Module_after_HISAT2_Count_cells {
-
-publishDir params.outdir, overwrite: true, mode: 'copy',
-	saveAs: {filename ->
-	if (filename =~ /.*_count.txt$/) "cell_counts_after_hisat2/$filename"
-}
-
-input:
- set val(oldname), file(sorted_bams) from g112_85_bam_file_g112_90
- set val(oldname), file(bams_index) from g112_85_bam_index_g112_90
- val cutoff_reads_per_cell from g_111_cutoff_g112_90
-
-output:
- set val(oldname), file("bam/*.bam")  into g112_90_sorted_bam_g112_91
- set val(oldname), file("bam/*.bam.bai")  into g112_90_bam_index_g112_91
- set val(oldname), file("*_count.txt")  into g112_90_count_file_g112_91
-
-when:
-(params.run_Single_Cell_Module && (params.run_Single_Cell_Module == "yes")) || !params.run_Single_Cell_Module
-
-script:
-"""
-find  -name "*.bam" > filelist.txt
-python ${params.countUniqueAlignedBarcodes_fromFile_filePath} -i filelist.txt -m ${cutoff_reads_per_cell} -o ${oldname}_count.txt
-mkdir bam
-mv $sorted_bams bam/.
-mv $bams_index bam/.
-"""
-}
-}
-
-
-params.filter_lowCountBC_bam_print_py_filePath =  ""  //* @input
-maxCellsForTmpFile = params.Single_Cell_Module_after_HISAT2_filter_lowCount.maxCellsForTmpFile
-
-//* autofill
-if ($HOSTNAME == "ghpcc06.umassrc.org"){
-    $TIME = 500
-    $CPU  = 1
-    $MEMORY = 1
-    $QUEUE = "long"
-}
-//*
-
-process Single_Cell_Module_after_HISAT2_filter_lowCount {
-
-publishDir params.outdir, overwrite: true, mode: 'copy',
-	saveAs: {filename ->
-	if (filename =~ /${name}_filtered_.*.bam$/) "filtered_bam_after_hisat2/$filename"
-}
-
-input:
- set val(oldname), file(sorted_bams) from g112_90_sorted_bam_g112_91
- set val(name), file(count_file) from g112_90_count_file_g112_91
- set val(oldname), file(bam_index) from g112_90_bam_index_g112_91
- val cutoff_for_filter from g_111_cutoff_g112_91
-
-output:
- set val(name), file("${name}_filtered_*.bam")  into g112_91_filtered_bam_g112_87
-
-"""
-python ${params.filter_lowCountBC_bam_print_py_filePath} -i ${sorted_bams} -b ${name}_count.txt -o ${name}_filtered.bam -n ${cutoff_for_filter} -c ${maxCellsForTmpFile}
-"""
-}
-
-esat_parameters = params.Single_Cell_Module_after_HISAT2_ESAT.esat_parameters
-params.ESAT_path =  ""  //* @input
-params.gene_to_transcript_mapping_file =  ""  //* @input
-
-
-//* autofill
-if ($HOSTNAME == "default"){
-    $CPU  = 1
-    $MEMORY = 40
-}
-//* platform
-if ($HOSTNAME == "ghpcc06.umassrc.org"){
-    $TIME = 500
-    $CPU  = 1
-    $MEMORY = 40
-    $QUEUE = "long"
-}
-//* platform
-//* autofill
-
-process Single_Cell_Module_after_HISAT2_ESAT {
-
-publishDir params.outdir, overwrite: true, mode: 'copy',
-	saveAs: {filename ->
-	if (filename =~ /.*.(txt|log)$/) "esat_after_hisat2/$filename"
-	else if (filename =~ /.*umi.distributions.txt$/) "esat_after_hisat2/$filename"
-}
-
-input:
- set val(name), file(filtered_bam) from g112_91_filtered_bam_g112_87.transpose()
-
-output:
- file "*.{txt,log}"  into g112_87_outputFileTxt
- set val(name), file("*umi.distributions.txt")  into g112_87_UMI_distributions_g112_88
-
-script:
-nameAll = filtered_bam.toString()
-namePrefix = nameAll - ".bam"
-"""    
-find  -name "*.bam" | awk '{print "${namePrefix}\t"\$1 }' > ${namePrefix}_filelist.txt
-java -Xmx40g -jar ${params.ESAT_path} -alignments ${namePrefix}_filelist.txt -out ${namePrefix}_esat.txt -geneMapping ${params.gene_to_transcript_mapping_file} ${esat_parameters}
-mv scripture2.log ${namePrefix}_scripture2.log
-"""
-}
-
-params.cleanLowEndUmis_path =  ""  //* @input
-
-//* autofill
-if ($HOSTNAME == "default"){
-    $CPU  = 1
-    $MEMORY = 30
-}
-//* platform
-if ($HOSTNAME == "ghpcc06.umassrc.org"){
-    $TIME = 700
-    $CPU  = 1
-    $MEMORY = 30
-    $QUEUE = "long"
-}
-//* platform
-//* autofill
-
-process Single_Cell_Module_after_HISAT2_UMI_Trim {
-
-publishDir params.outdir, overwrite: true, mode: 'copy',
-	saveAs: {filename ->
-	if (filename =~ /.*_umiClean.txt$/) "UMI_count_final_after_hisat2/$filename"
-}
-
-input:
- set val(name), file(umi_dist) from g112_87_UMI_distributions_g112_88.groupTuple()
-
-output:
- set val(name), file("*_umiClean.txt")  into g112_88_UMI_clean
-
-"""
-cat ${umi_dist} > ${name}_merged_umi.distributions.txt
-python ${params.cleanLowEndUmis_path} \
--i ${name}_merged_umi.distributions.txt \
--o ${name}_umiClean.txt \
--n 2
 """
 }
 
@@ -851,16 +685,16 @@ input:
 output:
  set val(oldname), file("${oldname}.bam")  into g117_13_merged_bams
  set val(oldname), file("*_sorted*bai")  into g117_13_bam_index
- set val(oldname), file("*_sorted*bam")  into g117_13_sorted_bam_g110_85
+ set val(oldname), file("*_sorted*bam")  into g117_13_sorted_bam_g122_92
 
 shell:
 '''
 num=$(echo "!{bamfiles.join(" ")}" | awk -F" " '{print NF-1}')
 if [ "${num}" -gt 0 ]; then
-    samtools merge !{oldname}.bam !{bamfiles.join(" ")} && samtools sort -O bam -T !{oldname} -o !{oldname}_sorted.bam !{oldname}.bam && samtools index !{oldname}_sorted.bam
+    samtools merge !{oldname}.bam !{bamfiles.join(" ")} && samtools sort -o !{oldname}_sorted.bam !{oldname}.bam && samtools index !{oldname}_sorted.bam
 else
     mv !{bamfiles.join(" ")} !{oldname}.bam 2>/dev/null || true
-    samtools sort  -T !{oldname} -O bam -o !{oldname}_sorted.bam !{oldname}.bam && samtools index !{oldname}_sorted.bam
+    samtools sort  -o !{oldname}_sorted.bam !{oldname}.bam && samtools index !{oldname}_sorted.bam
 fi
 '''
 }
@@ -879,188 +713,22 @@ if ($HOSTNAME == "ghpcc06.umassrc.org"){
 process Single_Cell_Module_after_Tophat2_samtools_sort_index {
 
 input:
- set val(name), file(bam) from g117_13_sorted_bam_g110_85
+ set val(name), file(bam) from g117_13_sorted_bam_g122_92
 
 output:
- set val(name), file("bam/*.bam")  into g110_85_bam_file_g110_90
- set val(name), file("bam/*.bai")  into g110_85_bam_index_g110_90
+ set val(name), file("bam/*.bam")  into g122_92_bam_file_g122_90
+ set val(name), file("bam/*.bai")  into g122_92_bam_index_g122_90
 
 script:
 nameAll = bam.toString()
 if (nameAll.contains('_sorted.bam')) {
     runSamtools = "samtools index " + bam 
 } else {
-    runSamtools = "samtools sort " + bam + " " + name +"_sorted && samtools index " + name + "_sorted.bam "
+    runSamtools = "samtools sort -o " + name +"_sorted " + bam +" && samtools index " + name + "_sorted.bam "
 }
 """
 $runSamtools
 mkdir -p bam && mv *_sorted.ba* bam/.
-"""
-}
-
-params.countUniqueAlignedBarcodes_fromFile_filePath =  ""  //* @input
-
-//* autofill
-if ($HOSTNAME == "ghpcc06.umassrc.org"){
-    $TIME = 500
-    $CPU  = 1
-    $MEMORY = 1
-    $QUEUE = "long"
-}
-//*
-if (!((params.run_Single_Cell_Module && (params.run_Single_Cell_Module == "yes")) || !params.run_Single_Cell_Module)){
-g110_85_bam_file_g110_90.into{g110_90_sorted_bam_g110_91}
-g110_85_bam_index_g110_90.into{g110_90_bam_index_g110_91}
-g110_90_count_file_g110_91 = Channel.empty()
-} else {
-
-
-process Single_Cell_Module_after_Tophat2_Count_cells {
-
-publishDir params.outdir, overwrite: true, mode: 'copy',
-	saveAs: {filename ->
-	if (filename =~ /.*_count.txt$/) "cell_counts_after_tophat2/$filename"
-}
-
-input:
- set val(oldname), file(sorted_bams) from g110_85_bam_file_g110_90
- set val(oldname), file(bams_index) from g110_85_bam_index_g110_90
- val cutoff_reads_per_cell from g_111_cutoff_g110_90
-
-output:
- set val(oldname), file("bam/*.bam")  into g110_90_sorted_bam_g110_91
- set val(oldname), file("bam/*.bam.bai")  into g110_90_bam_index_g110_91
- set val(oldname), file("*_count.txt")  into g110_90_count_file_g110_91
-
-when:
-(params.run_Single_Cell_Module && (params.run_Single_Cell_Module == "yes")) || !params.run_Single_Cell_Module
-
-script:
-"""
-find  -name "*.bam" > filelist.txt
-python ${params.countUniqueAlignedBarcodes_fromFile_filePath} -i filelist.txt -m ${cutoff_reads_per_cell} -o ${oldname}_count.txt
-mkdir bam
-mv $sorted_bams bam/.
-mv $bams_index bam/.
-"""
-}
-}
-
-
-params.filter_lowCountBC_bam_print_py_filePath =  ""  //* @input
-maxCellsForTmpFile = params.Single_Cell_Module_after_Tophat2_filter_lowCount.maxCellsForTmpFile
-
-//* autofill
-if ($HOSTNAME == "ghpcc06.umassrc.org"){
-    $TIME = 500
-    $CPU  = 1
-    $MEMORY = 1
-    $QUEUE = "long"
-}
-//*
-
-process Single_Cell_Module_after_Tophat2_filter_lowCount {
-
-publishDir params.outdir, overwrite: true, mode: 'copy',
-	saveAs: {filename ->
-	if (filename =~ /${name}_filtered_.*.bam$/) "filtered_bam_after_tophat2/$filename"
-}
-
-input:
- set val(oldname), file(sorted_bams) from g110_90_sorted_bam_g110_91
- set val(name), file(count_file) from g110_90_count_file_g110_91
- set val(oldname), file(bam_index) from g110_90_bam_index_g110_91
- val cutoff_for_filter from g_111_cutoff_g110_91
-
-output:
- set val(name), file("${name}_filtered_*.bam")  into g110_91_filtered_bam_g110_87
-
-"""
-python ${params.filter_lowCountBC_bam_print_py_filePath} -i ${sorted_bams} -b ${name}_count.txt -o ${name}_filtered.bam -n ${cutoff_for_filter} -c ${maxCellsForTmpFile}
-"""
-}
-
-esat_parameters = params.Single_Cell_Module_after_Tophat2_ESAT.esat_parameters
-params.ESAT_path =  ""  //* @input
-params.gene_to_transcript_mapping_file =  ""  //* @input
-
-
-//* autofill
-if ($HOSTNAME == "default"){
-    $CPU  = 1
-    $MEMORY = 40
-}
-//* platform
-if ($HOSTNAME == "ghpcc06.umassrc.org"){
-    $TIME = 500
-    $CPU  = 1
-    $MEMORY = 40
-    $QUEUE = "long"
-}
-//* platform
-//* autofill
-
-process Single_Cell_Module_after_Tophat2_ESAT {
-
-publishDir params.outdir, overwrite: true, mode: 'copy',
-	saveAs: {filename ->
-	if (filename =~ /.*.(txt|log)$/) "esat_after_tophat2/$filename"
-	else if (filename =~ /.*umi.distributions.txt$/) "esat_after_tophat2/$filename"
-}
-
-input:
- set val(name), file(filtered_bam) from g110_91_filtered_bam_g110_87.transpose()
-
-output:
- file "*.{txt,log}"  into g110_87_outputFileTxt
- set val(name), file("*umi.distributions.txt")  into g110_87_UMI_distributions_g110_88
-
-script:
-nameAll = filtered_bam.toString()
-namePrefix = nameAll - ".bam"
-"""    
-find  -name "*.bam" | awk '{print "${namePrefix}\t"\$1 }' > ${namePrefix}_filelist.txt
-java -Xmx40g -jar ${params.ESAT_path} -alignments ${namePrefix}_filelist.txt -out ${namePrefix}_esat.txt -geneMapping ${params.gene_to_transcript_mapping_file} ${esat_parameters}
-mv scripture2.log ${namePrefix}_scripture2.log
-"""
-}
-
-params.cleanLowEndUmis_path =  ""  //* @input
-
-//* autofill
-if ($HOSTNAME == "default"){
-    $CPU  = 1
-    $MEMORY = 30
-}
-//* platform
-if ($HOSTNAME == "ghpcc06.umassrc.org"){
-    $TIME = 700
-    $CPU  = 1
-    $MEMORY = 30
-    $QUEUE = "long"
-}
-//* platform
-//* autofill
-
-process Single_Cell_Module_after_Tophat2_UMI_Trim {
-
-publishDir params.outdir, overwrite: true, mode: 'copy',
-	saveAs: {filename ->
-	if (filename =~ /.*_umiClean.txt$/) "UMI_count_final_after_tophat2/$filename"
-}
-
-input:
- set val(name), file(umi_dist) from g110_87_UMI_distributions_g110_88.groupTuple()
-
-output:
- set val(name), file("*_umiClean.txt")  into g110_88_UMI_clean
-
-"""
-cat ${umi_dist} > ${name}_merged_umi.distributions.txt
-python ${params.cleanLowEndUmis_path} \
--i ${name}_merged_umi.distributions.txt \
--o ${name}_umiClean.txt \
--n 2
 """
 }
 
@@ -1203,16 +871,16 @@ input:
 output:
  set val(oldname), file("${oldname}.bam")  into g115_14_merged_bams
  set val(oldname), file("*_sorted*bai")  into g115_14_bam_index
- set val(oldname), file("*_sorted*bam")  into g115_14_sorted_bam_g113_85
+ set val(oldname), file("*_sorted*bam")  into g115_14_sorted_bam_g124_92
 
 shell:
 '''
 num=$(echo "!{bamfiles.join(" ")}" | awk -F" " '{print NF-1}')
 if [ "${num}" -gt 0 ]; then
-    samtools merge !{oldname}.bam !{bamfiles.join(" ")} && samtools sort -O bam -T !{oldname} -o !{oldname}_sorted.bam !{oldname}.bam && samtools index !{oldname}_sorted.bam
+    samtools merge !{oldname}.bam !{bamfiles.join(" ")} && samtools sort -o !{oldname}_sorted.bam !{oldname}.bam && samtools index !{oldname}_sorted.bam
 else
     mv !{bamfiles.join(" ")} !{oldname}.bam 2>/dev/null || true
-    samtools sort  -T !{oldname} -O bam -o !{oldname}_sorted.bam !{oldname}.bam && samtools index !{oldname}_sorted.bam
+    samtools sort  -o !{oldname}_sorted.bam !{oldname}.bam && samtools index !{oldname}_sorted.bam
 fi
 '''
 }
@@ -1231,188 +899,22 @@ if ($HOSTNAME == "ghpcc06.umassrc.org"){
 process Single_Cell_Module_after_STAR_samtools_sort_index {
 
 input:
- set val(name), file(bam) from g115_14_sorted_bam_g113_85
+ set val(name), file(bam) from g115_14_sorted_bam_g124_92
 
 output:
- set val(name), file("bam/*.bam")  into g113_85_bam_file_g113_90
- set val(name), file("bam/*.bai")  into g113_85_bam_index_g113_90
+ set val(name), file("bam/*.bam")  into g124_92_bam_file_g124_90
+ set val(name), file("bam/*.bai")  into g124_92_bam_index_g124_90
 
 script:
 nameAll = bam.toString()
 if (nameAll.contains('_sorted.bam')) {
     runSamtools = "samtools index " + bam 
 } else {
-    runSamtools = "samtools sort " + bam + " " + name +"_sorted && samtools index " + name + "_sorted.bam "
+    runSamtools = "samtools sort -o " + name +"_sorted " + bam +" && samtools index " + name + "_sorted.bam "
 }
 """
 $runSamtools
 mkdir -p bam && mv *_sorted.ba* bam/.
-"""
-}
-
-params.countUniqueAlignedBarcodes_fromFile_filePath =  ""  //* @input
-
-//* autofill
-if ($HOSTNAME == "ghpcc06.umassrc.org"){
-    $TIME = 500
-    $CPU  = 1
-    $MEMORY = 1
-    $QUEUE = "long"
-}
-//*
-if (!((params.run_Single_Cell_Module && (params.run_Single_Cell_Module == "yes")) || !params.run_Single_Cell_Module)){
-g113_85_bam_file_g113_90.into{g113_90_sorted_bam_g113_91}
-g113_85_bam_index_g113_90.into{g113_90_bam_index_g113_91}
-g113_90_count_file_g113_91 = Channel.empty()
-} else {
-
-
-process Single_Cell_Module_after_STAR_Count_cells {
-
-publishDir params.outdir, overwrite: true, mode: 'copy',
-	saveAs: {filename ->
-	if (filename =~ /.*_count.txt$/) "cell_counts_after_star/$filename"
-}
-
-input:
- set val(oldname), file(sorted_bams) from g113_85_bam_file_g113_90
- set val(oldname), file(bams_index) from g113_85_bam_index_g113_90
- val cutoff_reads_per_cell from g_111_cutoff_g113_90
-
-output:
- set val(oldname), file("bam/*.bam")  into g113_90_sorted_bam_g113_91
- set val(oldname), file("bam/*.bam.bai")  into g113_90_bam_index_g113_91
- set val(oldname), file("*_count.txt")  into g113_90_count_file_g113_91
-
-when:
-(params.run_Single_Cell_Module && (params.run_Single_Cell_Module == "yes")) || !params.run_Single_Cell_Module
-
-script:
-"""
-find  -name "*.bam" > filelist.txt
-python ${params.countUniqueAlignedBarcodes_fromFile_filePath} -i filelist.txt -m ${cutoff_reads_per_cell} -o ${oldname}_count.txt
-mkdir bam
-mv $sorted_bams bam/.
-mv $bams_index bam/.
-"""
-}
-}
-
-
-params.filter_lowCountBC_bam_print_py_filePath =  ""  //* @input
-maxCellsForTmpFile = params.Single_Cell_Module_after_STAR_filter_lowCount.maxCellsForTmpFile
-
-//* autofill
-if ($HOSTNAME == "ghpcc06.umassrc.org"){
-    $TIME = 500
-    $CPU  = 1
-    $MEMORY = 1
-    $QUEUE = "long"
-}
-//*
-
-process Single_Cell_Module_after_STAR_filter_lowCount {
-
-publishDir params.outdir, overwrite: true, mode: 'copy',
-	saveAs: {filename ->
-	if (filename =~ /${name}_filtered_.*.bam$/) "filtered_bam_after_star/$filename"
-}
-
-input:
- set val(oldname), file(sorted_bams) from g113_90_sorted_bam_g113_91
- set val(name), file(count_file) from g113_90_count_file_g113_91
- set val(oldname), file(bam_index) from g113_90_bam_index_g113_91
- val cutoff_for_filter from g_111_cutoff_g113_91
-
-output:
- set val(name), file("${name}_filtered_*.bam")  into g113_91_filtered_bam_g113_87
-
-"""
-python ${params.filter_lowCountBC_bam_print_py_filePath} -i ${sorted_bams} -b ${name}_count.txt -o ${name}_filtered.bam -n ${cutoff_for_filter} -c ${maxCellsForTmpFile}
-"""
-}
-
-esat_parameters = params.Single_Cell_Module_after_STAR_ESAT.esat_parameters
-params.ESAT_path =  ""  //* @input
-params.gene_to_transcript_mapping_file =  ""  //* @input
-
-
-//* autofill
-if ($HOSTNAME == "default"){
-    $CPU  = 1
-    $MEMORY = 40
-}
-//* platform
-if ($HOSTNAME == "ghpcc06.umassrc.org"){
-    $TIME = 500
-    $CPU  = 1
-    $MEMORY = 40
-    $QUEUE = "long"
-}
-//* platform
-//* autofill
-
-process Single_Cell_Module_after_STAR_ESAT {
-
-publishDir params.outdir, overwrite: true, mode: 'copy',
-	saveAs: {filename ->
-	if (filename =~ /.*.(txt|log)$/) "esat_after_star/$filename"
-	else if (filename =~ /.*umi.distributions.txt$/) "esat_after_star/$filename"
-}
-
-input:
- set val(name), file(filtered_bam) from g113_91_filtered_bam_g113_87.transpose()
-
-output:
- file "*.{txt,log}"  into g113_87_outputFileTxt
- set val(name), file("*umi.distributions.txt")  into g113_87_UMI_distributions_g113_88
-
-script:
-nameAll = filtered_bam.toString()
-namePrefix = nameAll - ".bam"
-"""    
-find  -name "*.bam" | awk '{print "${namePrefix}\t"\$1 }' > ${namePrefix}_filelist.txt
-java -Xmx40g -jar ${params.ESAT_path} -alignments ${namePrefix}_filelist.txt -out ${namePrefix}_esat.txt -geneMapping ${params.gene_to_transcript_mapping_file} ${esat_parameters}
-mv scripture2.log ${namePrefix}_scripture2.log
-"""
-}
-
-params.cleanLowEndUmis_path =  ""  //* @input
-
-//* autofill
-if ($HOSTNAME == "default"){
-    $CPU  = 1
-    $MEMORY = 30
-}
-//* platform
-if ($HOSTNAME == "ghpcc06.umassrc.org"){
-    $TIME = 700
-    $CPU  = 1
-    $MEMORY = 30
-    $QUEUE = "long"
-}
-//* platform
-//* autofill
-
-process Single_Cell_Module_after_STAR_UMI_Trim {
-
-publishDir params.outdir, overwrite: true, mode: 'copy',
-	saveAs: {filename ->
-	if (filename =~ /.*_umiClean.txt$/) "UMI_count_final_after_star/$filename"
-}
-
-input:
- set val(name), file(umi_dist) from g113_87_UMI_distributions_g113_88.groupTuple()
-
-output:
- set val(name), file("*_umiClean.txt")  into g113_88_UMI_clean
-
-"""
-cat ${umi_dist} > ${name}_merged_umi.distributions.txt
-python ${params.cleanLowEndUmis_path} \
--i ${name}_merged_umi.distributions.txt \
--o ${name}_umiClean.txt \
--n 2
 """
 }
 
@@ -1442,10 +944,10 @@ shell:
 '''
 num=$(echo "!{bamfiles.join(" ")}" | awk -F" " '{print NF-1}')
 if [ "${num}" -gt 0 ]; then
-    samtools merge !{oldname}.bam !{bamfiles.join(" ")} && samtools sort -O bam -T !{oldname} -o !{oldname}_sorted.bam !{oldname}.bam && samtools index !{oldname}_sorted.bam
+    samtools merge !{oldname}.bam !{bamfiles.join(" ")} && samtools sort -o !{oldname}_sorted.bam !{oldname}.bam && samtools index !{oldname}_sorted.bam
 else
     mv !{bamfiles.join(" ")} !{oldname}.bam 2>/dev/null || true
-    samtools sort  -T !{oldname} -O bam -o !{oldname}_sorted.bam !{oldname}.bam && samtools index !{oldname}_sorted.bam
+    samtools sort  -o !{oldname}_sorted.bam !{oldname}.bam && samtools index !{oldname}_sorted.bam
 fi
 '''
 }
@@ -1773,6 +1275,504 @@ script:
 name = outputFileName[0]
 """    
 awk 'FNR==1 && NR!=1 {  getline; } 1 {print} ' *.tsv > ${name}.tsv
+"""
+}
+
+params.countUniqueAlignedBarcodes_fromFile_filePath =  ""  //* @input
+
+//* autofill
+if ($HOSTNAME == "ghpcc06.umassrc.org"){
+    $TIME = 500
+    $CPU  = 1
+    $MEMORY = 1
+    $QUEUE = "long"
+}
+//*
+if (!((params.run_Single_Cell_Module && (params.run_Single_Cell_Module == "yes")) || !params.run_Single_Cell_Module)){
+g122_92_bam_file_g122_90.into{g122_90_sorted_bam_g122_91}
+g122_92_bam_index_g122_90.into{g122_90_bam_index_g122_91}
+g122_90_count_file_g122_91 = Channel.empty()
+} else {
+
+
+process Single_Cell_Module_after_Tophat2_Count_cells {
+
+publishDir params.outdir, overwrite: true, mode: 'copy',
+	saveAs: {filename ->
+	if (filename =~ /.*_count.txt$/) "cell_counts_after_tophat2/$filename"
+}
+
+input:
+ set val(oldname), file(sorted_bams) from g122_92_bam_file_g122_90
+ set val(oldname), file(bams_index) from g122_92_bam_index_g122_90
+ val cutoff_reads_per_cell from g_111_cutoff_g122_90
+
+output:
+ set val(oldname), file("bam/*.bam")  into g122_90_sorted_bam_g122_91
+ set val(oldname), file("bam/*.bam.bai")  into g122_90_bam_index_g122_91
+ set val(oldname), file("*_count.txt")  into g122_90_count_file_g122_91
+
+when:
+(params.run_Single_Cell_Module && (params.run_Single_Cell_Module == "yes")) || !params.run_Single_Cell_Module
+
+script:
+"""
+find  -name "*.bam" > filelist.txt
+python ${params.countUniqueAlignedBarcodes_fromFile_filePath} -i filelist.txt -m ${cutoff_reads_per_cell} -o ${oldname}_count.txt
+mkdir bam
+mv $sorted_bams bam/.
+mv $bams_index bam/.
+"""
+}
+}
+
+
+params.filter_lowCountBC_bam_print_py_filePath =  ""  //* @input
+maxCellsForTmpFile = params.Single_Cell_Module_after_Tophat2_filter_lowCount.maxCellsForTmpFile
+
+//* autofill
+if ($HOSTNAME == "ghpcc06.umassrc.org"){
+    $TIME = 500
+    $CPU  = 1
+    $MEMORY = 1
+    $QUEUE = "long"
+}
+//*
+
+process Single_Cell_Module_after_Tophat2_filter_lowCount {
+
+publishDir params.outdir, overwrite: true, mode: 'copy',
+	saveAs: {filename ->
+	if (filename =~ /${name}_filtered_.*.bam$/) "filtered_bam_after_tophat2/$filename"
+}
+
+input:
+ set val(oldname), file(sorted_bams) from g122_90_sorted_bam_g122_91
+ set val(name), file(count_file) from g122_90_count_file_g122_91
+ set val(oldname), file(bam_index) from g122_90_bam_index_g122_91
+ val cutoff_for_filter from g_111_cutoff_g122_91
+
+output:
+ set val(name), file("${name}_filtered_*.bam")  into g122_91_filtered_bam_g122_87
+
+"""
+python ${params.filter_lowCountBC_bam_print_py_filePath} -i ${sorted_bams} -b ${name}_count.txt -o ${name}_filtered.bam -n ${cutoff_for_filter} -c ${maxCellsForTmpFile}
+"""
+}
+
+esat_parameters = params.Single_Cell_Module_after_Tophat2_ESAT.esat_parameters
+params.ESAT_path =  ""  //* @input
+params.gene_to_transcript_mapping_file =  ""  //* @input
+
+
+//* autofill
+if ($HOSTNAME == "default"){
+    $CPU  = 1
+    $MEMORY = 40
+}
+//* platform
+if ($HOSTNAME == "ghpcc06.umassrc.org"){
+    $TIME = 500
+    $CPU  = 1
+    $MEMORY = 40
+    $QUEUE = "long"
+}
+//* platform
+//* autofill
+
+process Single_Cell_Module_after_Tophat2_ESAT {
+
+publishDir params.outdir, overwrite: true, mode: 'copy',
+	saveAs: {filename ->
+	if (filename =~ /.*.(txt|log)$/) "esat_after_tophat2/$filename"
+	else if (filename =~ /.*umi.distributions.txt$/) "esat_after_tophat2/$filename"
+}
+
+input:
+ set val(name), file(filtered_bam) from g122_91_filtered_bam_g122_87.transpose()
+
+output:
+ file "*.{txt,log}"  into g122_87_outputFileTxt
+ set val(name), file("*umi.distributions.txt")  into g122_87_UMI_distributions_g122_88
+
+script:
+nameAll = filtered_bam.toString()
+namePrefix = nameAll - ".bam"
+"""    
+find  -name "*.bam" | awk '{print "${namePrefix}\t"\$1 }' > ${namePrefix}_filelist.txt
+java -Xmx40g -jar ${params.ESAT_path} -alignments ${namePrefix}_filelist.txt -out ${namePrefix}_esat.txt -geneMapping ${params.gene_to_transcript_mapping_file} ${esat_parameters}
+mv scripture2.log ${namePrefix}_scripture2.log
+"""
+}
+
+params.cleanLowEndUmis_path =  ""  //* @input
+
+//* autofill
+if ($HOSTNAME == "default"){
+    $CPU  = 1
+    $MEMORY = 30
+}
+//* platform
+if ($HOSTNAME == "ghpcc06.umassrc.org"){
+    $TIME = 700
+    $CPU  = 1
+    $MEMORY = 30
+    $QUEUE = "long"
+}
+//* platform
+//* autofill
+
+process Single_Cell_Module_after_Tophat2_UMI_Trim {
+
+publishDir params.outdir, overwrite: true, mode: 'copy',
+	saveAs: {filename ->
+	if (filename =~ /.*_umiClean.txt$/) "UMI_count_final_after_tophat2/$filename"
+}
+
+input:
+ set val(name), file(umi_dist) from g122_87_UMI_distributions_g122_88.groupTuple()
+
+output:
+ set val(name), file("*_umiClean.txt")  into g122_88_UMI_clean
+
+"""
+cat ${umi_dist} > ${name}_merged_umi.distributions.txt
+python ${params.cleanLowEndUmis_path} \
+-i ${name}_merged_umi.distributions.txt \
+-o ${name}_umiClean.txt \
+-n 2
+"""
+}
+
+params.countUniqueAlignedBarcodes_fromFile_filePath =  ""  //* @input
+
+//* autofill
+if ($HOSTNAME == "ghpcc06.umassrc.org"){
+    $TIME = 500
+    $CPU  = 1
+    $MEMORY = 1
+    $QUEUE = "long"
+}
+//*
+if (!((params.run_Single_Cell_Module && (params.run_Single_Cell_Module == "yes")) || !params.run_Single_Cell_Module)){
+g123_92_bam_file_g123_90.into{g123_90_sorted_bam_g123_91}
+g123_92_bam_index_g123_90.into{g123_90_bam_index_g123_91}
+g123_90_count_file_g123_91 = Channel.empty()
+} else {
+
+
+process Single_Cell_Module_after_HISAT2_Count_cells {
+
+publishDir params.outdir, overwrite: true, mode: 'copy',
+	saveAs: {filename ->
+	if (filename =~ /.*_count.txt$/) "cell_counts_after_hisat2/$filename"
+}
+
+input:
+ set val(oldname), file(sorted_bams) from g123_92_bam_file_g123_90
+ set val(oldname), file(bams_index) from g123_92_bam_index_g123_90
+ val cutoff_reads_per_cell from g_111_cutoff_g123_90
+
+output:
+ set val(oldname), file("bam/*.bam")  into g123_90_sorted_bam_g123_91
+ set val(oldname), file("bam/*.bam.bai")  into g123_90_bam_index_g123_91
+ set val(oldname), file("*_count.txt")  into g123_90_count_file_g123_91
+
+when:
+(params.run_Single_Cell_Module && (params.run_Single_Cell_Module == "yes")) || !params.run_Single_Cell_Module
+
+script:
+"""
+find  -name "*.bam" > filelist.txt
+python ${params.countUniqueAlignedBarcodes_fromFile_filePath} -i filelist.txt -m ${cutoff_reads_per_cell} -o ${oldname}_count.txt
+mkdir bam
+mv $sorted_bams bam/.
+mv $bams_index bam/.
+"""
+}
+}
+
+
+params.filter_lowCountBC_bam_print_py_filePath =  ""  //* @input
+maxCellsForTmpFile = params.Single_Cell_Module_after_HISAT2_filter_lowCount.maxCellsForTmpFile
+
+//* autofill
+if ($HOSTNAME == "ghpcc06.umassrc.org"){
+    $TIME = 500
+    $CPU  = 1
+    $MEMORY = 1
+    $QUEUE = "long"
+}
+//*
+
+process Single_Cell_Module_after_HISAT2_filter_lowCount {
+
+publishDir params.outdir, overwrite: true, mode: 'copy',
+	saveAs: {filename ->
+	if (filename =~ /${name}_filtered_.*.bam$/) "filtered_bam_after_hisat2/$filename"
+}
+
+input:
+ set val(oldname), file(sorted_bams) from g123_90_sorted_bam_g123_91
+ set val(name), file(count_file) from g123_90_count_file_g123_91
+ set val(oldname), file(bam_index) from g123_90_bam_index_g123_91
+ val cutoff_for_filter from g_111_cutoff_g123_91
+
+output:
+ set val(name), file("${name}_filtered_*.bam")  into g123_91_filtered_bam_g123_87
+
+"""
+python ${params.filter_lowCountBC_bam_print_py_filePath} -i ${sorted_bams} -b ${name}_count.txt -o ${name}_filtered.bam -n ${cutoff_for_filter} -c ${maxCellsForTmpFile}
+"""
+}
+
+esat_parameters = params.Single_Cell_Module_after_HISAT2_ESAT.esat_parameters
+params.ESAT_path =  ""  //* @input
+params.gene_to_transcript_mapping_file =  ""  //* @input
+
+
+//* autofill
+if ($HOSTNAME == "default"){
+    $CPU  = 1
+    $MEMORY = 40
+}
+//* platform
+if ($HOSTNAME == "ghpcc06.umassrc.org"){
+    $TIME = 500
+    $CPU  = 1
+    $MEMORY = 40
+    $QUEUE = "long"
+}
+//* platform
+//* autofill
+
+process Single_Cell_Module_after_HISAT2_ESAT {
+
+publishDir params.outdir, overwrite: true, mode: 'copy',
+	saveAs: {filename ->
+	if (filename =~ /.*.(txt|log)$/) "esat_after_hisat2/$filename"
+	else if (filename =~ /.*umi.distributions.txt$/) "esat_after_hisat2/$filename"
+}
+
+input:
+ set val(name), file(filtered_bam) from g123_91_filtered_bam_g123_87.transpose()
+
+output:
+ file "*.{txt,log}"  into g123_87_outputFileTxt
+ set val(name), file("*umi.distributions.txt")  into g123_87_UMI_distributions_g123_88
+
+script:
+nameAll = filtered_bam.toString()
+namePrefix = nameAll - ".bam"
+"""    
+find  -name "*.bam" | awk '{print "${namePrefix}\t"\$1 }' > ${namePrefix}_filelist.txt
+java -Xmx40g -jar ${params.ESAT_path} -alignments ${namePrefix}_filelist.txt -out ${namePrefix}_esat.txt -geneMapping ${params.gene_to_transcript_mapping_file} ${esat_parameters}
+mv scripture2.log ${namePrefix}_scripture2.log
+"""
+}
+
+params.cleanLowEndUmis_path =  ""  //* @input
+
+//* autofill
+if ($HOSTNAME == "default"){
+    $CPU  = 1
+    $MEMORY = 30
+}
+//* platform
+if ($HOSTNAME == "ghpcc06.umassrc.org"){
+    $TIME = 700
+    $CPU  = 1
+    $MEMORY = 30
+    $QUEUE = "long"
+}
+//* platform
+//* autofill
+
+process Single_Cell_Module_after_HISAT2_UMI_Trim {
+
+publishDir params.outdir, overwrite: true, mode: 'copy',
+	saveAs: {filename ->
+	if (filename =~ /.*_umiClean.txt$/) "UMI_count_final_after_hisat2/$filename"
+}
+
+input:
+ set val(name), file(umi_dist) from g123_87_UMI_distributions_g123_88.groupTuple()
+
+output:
+ set val(name), file("*_umiClean.txt")  into g123_88_UMI_clean
+
+"""
+cat ${umi_dist} > ${name}_merged_umi.distributions.txt
+python ${params.cleanLowEndUmis_path} \
+-i ${name}_merged_umi.distributions.txt \
+-o ${name}_umiClean.txt \
+-n 2
+"""
+}
+
+params.countUniqueAlignedBarcodes_fromFile_filePath =  ""  //* @input
+
+//* autofill
+if ($HOSTNAME == "ghpcc06.umassrc.org"){
+    $TIME = 500
+    $CPU  = 1
+    $MEMORY = 1
+    $QUEUE = "long"
+}
+//*
+if (!((params.run_Single_Cell_Module && (params.run_Single_Cell_Module == "yes")) || !params.run_Single_Cell_Module)){
+g124_92_bam_file_g124_90.into{g124_90_sorted_bam_g124_91}
+g124_92_bam_index_g124_90.into{g124_90_bam_index_g124_91}
+g124_90_count_file_g124_91 = Channel.empty()
+} else {
+
+
+process Single_Cell_Module_after_STAR_Count_cells {
+
+publishDir params.outdir, overwrite: true, mode: 'copy',
+	saveAs: {filename ->
+	if (filename =~ /.*_count.txt$/) "cell_counts_after_star/$filename"
+}
+
+input:
+ set val(oldname), file(sorted_bams) from g124_92_bam_file_g124_90
+ set val(oldname), file(bams_index) from g124_92_bam_index_g124_90
+ val cutoff_reads_per_cell from g_111_cutoff_g124_90
+
+output:
+ set val(oldname), file("bam/*.bam")  into g124_90_sorted_bam_g124_91
+ set val(oldname), file("bam/*.bam.bai")  into g124_90_bam_index_g124_91
+ set val(oldname), file("*_count.txt")  into g124_90_count_file_g124_91
+
+when:
+(params.run_Single_Cell_Module && (params.run_Single_Cell_Module == "yes")) || !params.run_Single_Cell_Module
+
+script:
+"""
+find  -name "*.bam" > filelist.txt
+python ${params.countUniqueAlignedBarcodes_fromFile_filePath} -i filelist.txt -m ${cutoff_reads_per_cell} -o ${oldname}_count.txt
+mkdir bam
+mv $sorted_bams bam/.
+mv $bams_index bam/.
+"""
+}
+}
+
+
+params.filter_lowCountBC_bam_print_py_filePath =  ""  //* @input
+maxCellsForTmpFile = params.Single_Cell_Module_after_STAR_filter_lowCount.maxCellsForTmpFile
+
+//* autofill
+if ($HOSTNAME == "ghpcc06.umassrc.org"){
+    $TIME = 500
+    $CPU  = 1
+    $MEMORY = 1
+    $QUEUE = "long"
+}
+//*
+
+process Single_Cell_Module_after_STAR_filter_lowCount {
+
+publishDir params.outdir, overwrite: true, mode: 'copy',
+	saveAs: {filename ->
+	if (filename =~ /${name}_filtered_.*.bam$/) "filtered_bam_after_star/$filename"
+}
+
+input:
+ set val(oldname), file(sorted_bams) from g124_90_sorted_bam_g124_91
+ set val(name), file(count_file) from g124_90_count_file_g124_91
+ set val(oldname), file(bam_index) from g124_90_bam_index_g124_91
+ val cutoff_for_filter from g_111_cutoff_g124_91
+
+output:
+ set val(name), file("${name}_filtered_*.bam")  into g124_91_filtered_bam_g124_87
+
+"""
+python ${params.filter_lowCountBC_bam_print_py_filePath} -i ${sorted_bams} -b ${name}_count.txt -o ${name}_filtered.bam -n ${cutoff_for_filter} -c ${maxCellsForTmpFile}
+"""
+}
+
+esat_parameters = params.Single_Cell_Module_after_STAR_ESAT.esat_parameters
+params.ESAT_path =  ""  //* @input
+params.gene_to_transcript_mapping_file =  ""  //* @input
+
+
+//* autofill
+if ($HOSTNAME == "default"){
+    $CPU  = 1
+    $MEMORY = 40
+}
+//* platform
+if ($HOSTNAME == "ghpcc06.umassrc.org"){
+    $TIME = 500
+    $CPU  = 1
+    $MEMORY = 40
+    $QUEUE = "long"
+}
+//* platform
+//* autofill
+
+process Single_Cell_Module_after_STAR_ESAT {
+
+publishDir params.outdir, overwrite: true, mode: 'copy',
+	saveAs: {filename ->
+	if (filename =~ /.*.(txt|log)$/) "esat_after_star/$filename"
+	else if (filename =~ /.*umi.distributions.txt$/) "esat_after_star/$filename"
+}
+
+input:
+ set val(name), file(filtered_bam) from g124_91_filtered_bam_g124_87.transpose()
+
+output:
+ file "*.{txt,log}"  into g124_87_outputFileTxt
+ set val(name), file("*umi.distributions.txt")  into g124_87_UMI_distributions_g124_88
+
+script:
+nameAll = filtered_bam.toString()
+namePrefix = nameAll - ".bam"
+"""    
+find  -name "*.bam" | awk '{print "${namePrefix}\t"\$1 }' > ${namePrefix}_filelist.txt
+java -Xmx40g -jar ${params.ESAT_path} -alignments ${namePrefix}_filelist.txt -out ${namePrefix}_esat.txt -geneMapping ${params.gene_to_transcript_mapping_file} ${esat_parameters}
+mv scripture2.log ${namePrefix}_scripture2.log
+"""
+}
+
+params.cleanLowEndUmis_path =  ""  //* @input
+
+//* autofill
+if ($HOSTNAME == "default"){
+    $CPU  = 1
+    $MEMORY = 30
+}
+//* platform
+if ($HOSTNAME == "ghpcc06.umassrc.org"){
+    $TIME = 700
+    $CPU  = 1
+    $MEMORY = 30
+    $QUEUE = "long"
+}
+//* platform
+//* autofill
+
+process Single_Cell_Module_after_STAR_UMI_Trim {
+
+publishDir params.outdir, overwrite: true, mode: 'copy',
+	saveAs: {filename ->
+	if (filename =~ /.*_umiClean.txt$/) "UMI_count_final_after_star/$filename"
+}
+
+input:
+ set val(name), file(umi_dist) from g124_87_UMI_distributions_g124_88.groupTuple()
+
+output:
+ set val(name), file("*_umiClean.txt")  into g124_88_UMI_clean
+
+"""
+cat ${umi_dist} > ${name}_merged_umi.distributions.txt
+python ${params.cleanLowEndUmis_path} \
+-i ${name}_merged_umi.distributions.txt \
+-o ${name}_umiClean.txt \
+-n 2
 """
 }
 
