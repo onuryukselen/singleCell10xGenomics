@@ -22,3 +22,4 @@ dependencies:
   - bedtools=2.27.1
   - fastx_toolkit=0.0.14
   - ucsc-wigToBigWig=366
+  - umi_tools=1.0.0
