@@ -6,6 +6,7 @@ channels:
   - bioconda
   - defaults
 dependencies:
+  - pysam=0.15.2
   - fastqc=0.11.8
   - star=2.6.1d # don't upgrade me - 2.7X indices incompatible with iGenomes.
   - hisat2=2.1.0
@@ -23,3 +24,4 @@ dependencies:
   - fastx_toolkit=0.0.14
   - ucsc-wigToBigWig=366
   - umi_tools=1.0.0
+  
