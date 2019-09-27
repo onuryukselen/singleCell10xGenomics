@@ -26,9 +26,6 @@ g_118_gtf_url_g114_15 = file(params.gtf_url, type: 'any')
 g_119_genome_url_g114_15 = file(params.genome_url, type: 'any') 
 Channel.value(params.commondb_url).set{g_120_commondb_url_g114_15}
 
-UMIqualityFilterThreshold = params.UmiExtract_10xGenomics.UMIqualityFilterThreshold
-insertSide = params.UmiExtract_10xGenomics.insertSide
-
 
 if ($HOSTNAME == "ghpcc06.umassrc.org"){
     $TIME = 2000
@@ -36,7 +33,6 @@ if ($HOSTNAME == "ghpcc06.umassrc.org"){
     $MEMORY = 10
     $QUEUE = "long"
 }
-
 process UmiExtract_10xGenomics {
 
 publishDir params.outdir, overwrite: true, mode: 'copy',
@@ -54,6 +50,9 @@ output:
  set val(name), file("*_valid.fastq")  into g_72_valid_fastq_g_106
 
 script:
+UMIqualityFilterThreshold = params.UmiExtract_10xGenomics.UMIqualityFilterThreshold
+insertSide = params.UmiExtract_10xGenomics.insertSide
+
 readArray = reads.toString().split(' ')
 """
 if [ "${mate}" == "pair" ]; then
@@ -80,6 +79,7 @@ umi_tools extract --bc-pattern='${cellBarcodePattern}' \
 fi
 sed -i 's/_/:/g' *valid.fastq
 """
+
 }
 
 params.run_Split_Fastq =  "no"  //* @dropdown @options:"yes","no" @show_settings:"SplitFastq"

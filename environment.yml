@@ -9,6 +9,7 @@ dependencies:
   - python=2.7.15
   - pip=19.1
   - pysam=0.15.2
+  - biopython=1.74
   - fastqc=0.11.8
   - star=2.6.1d # don't upgrade me - 2.7X indices incompatible with iGenomes.
   - hisat2=2.1.0
